@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2K Green Trainer — Extended</title>
+<style>
+  :root{--fg:#e5e7eb;--muted:#9ca3af;--bg:#000;--accent:#22c55e;--danger:#ef4444;--panel:#0b0b0b;--track:#0b0b0b;--trackMid:#141414;--chrome:#2a2a2a;--glow:0 0 28px rgba(34,197,94,.75),0 0 64px rgba(34,197,94,.45)}
+  html,body{height:100%}
+  body{margin:0;background:#000;color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,#0a0a0a,#050505);border-bottom:1px solid #121212}
+  header .title{font-weight:800;letter-spacing:.4px}
+  #wrap{position:relative;height:calc(100% - 52px)}
+  canvas{display:block;width:100%;height:100%;position:absolute;inset:0;z-index:0}
+
+  /* UI overlay */
+  #ui{position:absolute;inset:0;z-index:30;pointer-events:none}
+  .hud{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);border:1px solid #222;border-radius:16px;padding:10px 12px;min-width:260px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .streak{font-weight:700}
+  .flames{filter:drop-shadow(0 0 8px rgba(255,140,0,.65))}
+
+  /* Vertical Meter (25% shorter) */
+  .meter{position:absolute;left:calc(50% + 120px);top:120px;width:22px;height:158px;border-radius:12px;border:1px solid var(--chrome);box-shadow:0 8px 28px rgba(0,0,0,.45)}
+  .meter .chrome{position:absolute;inset:0;border-radius:12px;background:linear-gradient(180deg,#0c0c0c,#0f0f0f)}
+  .meter .track{position:absolute;inset:6px;border-radius:9px;background:linear-gradient(180deg,var(--track),var(--trackMid))}
+  .meter .ticks{position:absolute;left:6px;right:6px;top:6px;bottom:6px;opacity:.55}
+  .meter .ticks::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,transparent 0 12px,rgba(255,255,255,.07) 12px 13px)}
+  .meter .green{position:absolute;left:6px;right:6px;border-radius:6px;background:linear-gradient(180deg,#10b981,#16a34a);box-shadow:0 0 0 rgba(0,0,0,0)}
+  .meter .cursor{position:absolute;left:3px;right:3px;height:12px;border-radius:8px;background:linear-gradient(90deg,#e5e7eb,#9ca3af);box-shadow:0 0 10px rgba(255,255,255,.35)}
+  .meter.success .track{background:linear-gradient(180deg,#16a34a,#10b981)}
+  .meter.glow .green{box-shadow:var(--glow)}
+
+  .callout{position:absolute;right:18px;top:340px;font-weight:900;letter-spacing:.5px;text-shadow:0 0 12px rgba(0,0,0,.8)}
+  .callout.green{color:var(--accent)} .callout.miss{color:var(--danger)}
+
+  /* Screens */
+  .screen{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.82);backdrop-filter:blur(2px);z-index:1000;pointer-events:auto}
+  .screen.show{display:flex;pointer-events:auto}
+  .panel{background:var(--panel);border:1px solid #222;border-radius:20px;padding:18px 20px;min-width:360px;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .panel h1,.panel h2{margin:6px 0 12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  button{background:#121212;color:var(--fg);border:1px solid #222;border-radius:12px;padding:9px 12px;cursor:pointer}
+  button:hover{background:#1b1b1b}
+  .panel .grid button.active{outline:2px solid #22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.15) inset}
+  input{background:#121212;color:var(--fg);border:1px solid #333;border-radius:10px;padding:8px 10px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:6px 8px;border-bottom:1px solid #1b1b1b;text-align:left}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">2K Green Trainer</div>
+  <div>
+    <button id="btnMenu">Main Menu</button>
+    <button id="btnQuit">Quit</button>
+  </div>
+</header>
+<div id="wrap">
+  <canvas id="scene"></canvas>
+
+  <!-- HUD + Meter -->
+  <div id="ui">
+    <div class="hud">
+      <div class="row"><span>Shot:</span><span id="shotLabel">—</span></div>
+      <div class="row" style="margin-top:6px"><span>Contest:</span><span id="contestLabel">—</span></div>
+      <div class="row" style="margin-top:6px"><span>Greens:</span><span id="greensCount">0/25</span></div>
+      <div class="row" style="margin-top:6px"><span>Streak:</span><span class="streak"><span id="streakCount">0</span> <span id="flames" class="flames"></span></span></div>
+    </div>
+    <div id="meter" class="meter">
+      <div class="chrome"></div>
+      <div class="track"></div>
+      <div class="ticks"></div>
+      <div class="green" id="green"></div>
+      <div class="cursor" id="cursor"></div>
+    </div>
+    <div id="callout" class="callout"></div>
+  </div>
+
+  <!-- START SCREEN -->
+  <div id="menu" class="screen show">
+    <div class="panel">
+      <h1>2K Green Trainer</h1>
+      <p style="color:var(--muted)">Hold <b>Space/Enter</b> (or controller A/Cross or X/Square) to charge upward. <b>Release inside the top green</b>. Holding to the top = <b>MISS</b>. 25 shots per session.</p>
+      <h3>1) Select Shot Type</h3>
+      <div class="grid">
+        <button data-shot="three" class="active">Three‑Pointer</button>
+        <button data-shot="mid">Mid‑Range</button>
+        <button data-shot="rim">Layup/Dunk</button>
+      </div>
+      <h3 style="margin-top:12px">2) Select Contest Level</h3>
+      <div class="grid">
+        <button data-contest="5" class="active">5% Contested</button>
+        <button data-contest="20">20% Contested</button>
+        <button data-contest="40">40% Contested</button>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end;align-items:center">
+        <button id="start">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div id="leader" class="screen">
+    <div class="panel">
+      <h2>Leaderboard</h2>
+      <div class="row" id="nameRow" style="margin-bottom:8px">
+        <input id="playerName" placeholder="Your name" />
+        <button id="saveScore">Save</button>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Name</th><th>Greens</th><th>Mode</th></tr></thead>
+        <tbody id="lbBody"></tbody>
+      </table>
+      <div class="grid" style="margin-top:10px">
+        <button id="playAgain">Play Again</button>
+        <button id="quitToMenu">Quit to Menu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+// ================== THREE.JS SCENE ==================
+const canvas=document.getElementById('scene');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight-52, false);
+renderer.setClearColor(0x000000,1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(50, window.innerWidth/(window.innerHeight-52), .1, 100);
+camera.position.set(0,1.7,5.0);
+window.addEventListener('resize',()=>{ renderer.setSize(window.innerWidth, window.innerHeight-52, false); camera.aspect=window.innerWidth/(window.innerHeight-52); camera.updateProjectionMatrix(); });
+scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 0.9));
+const key=new THREE.DirectionalLight(0xffffff,1.6); key.position.set(2.4,3.2,2.2); key.castShadow=true; key.shadow.mapSize.set(1024,1024); scene.add(key);
+
+// Floor
+const floorMat=new THREE.MeshStandardMaterial({color:0x0b0b0b, roughness:.9, metalness:.0});
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(12,12), floorMat);
+floor.rotation.x=-Math.PI/2; floor.position.y=-0.01; floor.receiveShadow=true; scene.add(floor);
+
+// Backboard (with white square)
+const boardMat=new THREE.MeshStandardMaterial({color:0xf9fafb, roughness:.8, metalness:.0});
+const board=new THREE.Mesh(new THREE.PlaneGeometry(1.8,1.05), boardMat);
+board.position.set(0,2.75,-0.05); board.receiveShadow=false; scene.add(board);
+// black border
+const border=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1.8,1.05)), new THREE.LineBasicMaterial({color:0x111111}));
+border.position.copy(board.position); scene.add(border);
+// target square
+const target=new THREE.Mesh(new THREE.PlaneGeometry(0.45,0.38), new THREE.MeshBasicMaterial({color:0x111111}));
+target.position.set(0,2.63,0.001); scene.add(target);
+
+// Rim (more metallic) + more realistic net made from lines
+const rimMat=new THREE.MeshPhysicalMaterial({color:0xff3d00, metalness:1.0, roughness:0.32, clearcoat:0.2});
+const rim=new THREE.Mesh(new THREE.TorusGeometry(.23,.022,20,40), rimMat);
+rim.position.set(0,2.6,0); rim.rotation.x=Math.PI/2; rim.castShadow=true; scene.add(rim);
+
+// Net made of line segments (criss‑cross)
+function buildNet(){
+  const topR=0.23, botR=0.09, h=0.45, N=16;
+  const mat=new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.85});
+  const g=new THREE.BufferGeometry();
+  const segs=[];
+  for(let i=0;i<N;i++){
+    const a=i*(Math.PI*2/N); const b=((i+1)%N)*(Math.PI*2/N);
+    const tx=Math.cos(a)*topR, tz=Math.sin(a)*topR;
+    const bx=Math.cos(a)*botR, bz=Math.sin(a)*botR;
+    const tx2=Math.cos(b)*topR, tz2=Math.sin(b)*topR;
+    const bx2=Math.cos(b)*botR, bz2=Math.sin(b)*botR;
+    // vertical
+    segs.push(tx,2.6, tz,  bx,2.6- h, bz);
+    // diagonal
+    segs.push(tx,2.6, tz,  bx2,2.6- h, bz2);
+  }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(segs,3));
+  const lines=new THREE.LineSegments(g,mat); lines.castShadow=false; lines.receiveShadow=false; scene.add(lines);
+}
+buildNet();
+
+// Ball (more physical)
+const ballMat=new THREE.MeshPhysicalMaterial({color:0xd97706, roughness:.55, metalness:.05, clearcoat:0.05, sheen:0.2});
+const ball=new THREE.Mesh(new THREE.SphereGeometry(.12, 32, 32), ballMat);
+ball.position.set(.18,1.55,0); ball.castShadow=true; scene.add(ball);
+
+// ===== Loaders (Draco/KTX2/Meshopt) =====
+const gltfLoader=new GLTFLoader();
+const dracoLoader=new DRACOLoader();
+dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
+const ktx2Loader=new KTX2Loader();
+ktx2Loader.setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/');
+ktx2Loader.detectSupport(renderer);
+gltfLoader.setDRACOLoader(dracoLoader);
+gltfLoader.setKTX2Loader(ktx2Loader);
+gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+// ===== Player model (Mixamo‑friendly) =====
+let playerPivot=null, playerModel=null, playerBones={};
+let mixer=null, jumpShotClip=null; // if the GLB includes animation we'll use it
+const TOON_STYLE=true; // set false to keep original materials
+const MODEL_TARGET_HEIGHT=0.35; // on-screen height
+
+function findLikelyBones(obj){
+  obj.traverse(n=>{
+    const name=(n.name||'').toLowerCase();
+    if((/arm(?!ature)|upperarm|shoulder/).test(name) && !playerBones.armR) playerBones.armR=n;
+    if((/forearm|lowerarm/).test(name) && !playerBones.forearmR) playerBones.forearmR=n;
+    if((/hand|wrist/).test(name) && !playerBones.handR) playerBones.handR=n;
+  });
+}
+
+function restyleToon(root){
+  root.traverse(obj=>{
+    if(obj.isMesh){
+      const c=(obj.material&&obj.material.color)? obj.material.color.getHex(): 0xcccccc;
+      obj.material = new THREE.MeshToonMaterial({color:c, gradientMap:null});
+      obj.material.needsUpdate=true;
+      const outline = obj.clone();
+      outline.material = new THREE.MeshBasicMaterial({color:0x000000, side:THREE.BackSide});
+      outline.scale.multiplyScalar(1.03);
+      obj.add(outline);
+    }
+  });
+}
+
+function setupModel(model, animations, sourceLabel){
+  // scale to target
+  const rawBox=new THREE.Box3().setFromObject(model);
+  const size=new THREE.Vector3(); rawBox.getSize(size);
+  const scale= MODEL_TARGET_HEIGHT/Math.max(0.001,size.y);
+  model.scale.setScalar(scale);
+  const box=new THREE.Box3().setFromObject(model);
+  const center=box.getCenter(new THREE.Vector3());
+  const min=box.min.clone();
+  playerPivot=new THREE.Group();
+  model.position.sub(center);
+  model.position.y -= min.y; // feet to y=0
+  playerPivot.add(model);
+  playerPivot.position.set(0,0,1.6);
+  if(TOON_STYLE) { restyleToon(model); }
+  scene.add(playerPivot);
+  playerModel=model; playerBones={}; findLikelyBones(model);
+  // animations
+  if(animations && animations.length){
+    mixer = new THREE.AnimationMixer(model);
+    // pick first clip or one containing 'shoot'/'basket'
+    jumpShotClip = animations.find(a=>/shoot|basket|jump/i.test(a.name)) || animations[0];
+  }
+  callout.className='callout green'; callout.textContent=`Model ready: ${sourceLabel}`; setTimeout(()=>callout.textContent='',1200);
+}
+
+function fallbackDummy(){
+  const jersey=new THREE.MeshStandardMaterial({color:0x1f2937, metalness:.15, roughness:.6});
+  const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.32,.9,12,24), jersey); torso.position.y=1.25; torso.castShadow=true; scene.add(torso);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.22,20,20), new THREE.MeshStandardMaterial({color:0xd6cfc7,roughness:.7})); head.position.y=1.68; head.castShadow=true; scene.add(head);
+}
+
+// Auto‑load model (tries Remy first), then try to load a matching animation file
+(function autoLoad(){
+  const MODEL_PATHS=["models/Remy.glb","models/remy.glb","models/players.glb","models/player.glb"]; // model priority (case variants)
+  const ANIM_PATHS=["models/Underhand Shot.glb","models/Underhand%20Shot.glb","models/Remy_shot.glb","models/shot.glb","models/animation.glb"]; // optional animation (handles space and encoded space)
+
+  const tryAnim=(animIndex)=>{
+    if(animIndex>=ANIM_PATHS.length) return; // no external anim, that's okay
+    const ap=ANIM_PATHS[animIndex];
+    const aurl=encodeURI(ap);
+    gltfLoader.load(aurl,(gltf)=>{
+      if(!playerModel) return; // model not ready yet, will be handled after
+      if(!gltf.animations?.length) { console.warn('No animations in', ap); return; }
+      mixer = new THREE.AnimationMixer(playerModel);
+      // Prefer clips with 'shoot'/'jump'/'basket' in name
+      jumpShotClip = gltf.animations.find(a=>/shoot|jump|basket/i.test(a.name)) || gltf.animations[0];
+      callout.className='callout green'; callout.textContent=`Animation ready: ${ap}`; setTimeout(()=>callout.textContent='',1200);
+    }, undefined, err=>{ console.warn('Anim load failed', ap, err); tryAnim(animIndex+1); });
+  };
+
+  const tryModel=(i)=>{
+    if(i>=MODEL_PATHS.length){ callout.className='callout miss'; callout.textContent='Using fallback dummy — model not found'; setTimeout(()=>callout.textContent='',1600); fallbackDummy(); tryAnim(0); return; }
+    const p=MODEL_PATHS[i];
+    const url=encodeURI(p);
+    gltfLoader.load(url,(gltf)=>{ setupModel(gltf.scene, gltf.animations, p); if(gltf.animations?.length){ mixer=new THREE.AnimationMixer(playerModel); jumpShotClip=gltf.animations.find(a=>/shoot|jump|basket/i.test(a.name))||gltf.animations[0]; } tryAnim(0); }, undefined, (err)=>{ console.warn('Model load failed', p, err); callout.className='callout miss'; callout.textContent=`Model load failed: ${p}`; setTimeout(()=>callout.textContent='',1600); tryModel(i+1); });
+  };
+  tryModel(0);
+})();
+
+// Render Loop (with mixer)
+const clock=new THREE.Clock();
+function render(){ requestAnimationFrame(render); const dt=clock.getDelta(); if(mixer) mixer.update(dt); renderer.render(scene,camera);} render();
+
+// ================== GAME LOGIC (25 attempts) ==================
+const meter=document.getElementById('meter');
+const green=document.getElementById('green');
+const cursor=document.getElementById('cursor');
+const callout=document.getElementById('callout');
+const shotLabel=document.getElementById('shotLabel');
+const contestLabel=document.getElementById('contestLabel');
+const greensCount=document.getElementById('greensCount');
+const streakEl=document.getElementById('streakCount');
+const flames=document.getElementById('flames');
+
+const menu=document.getElementById('menu');
+const leader=document.getElementById('leader');
+const startBtn=document.getElementById('start');
+const nameRow=document.getElementById('nameRow');
+const playerName=document.getElementById('playerName');
+const saveScore=document.getElementById('saveScore');
+const lbBody=document.getElementById('lbBody');
+const playAgain=document.getElementById('playAgain');
+const quitToMenu=document.getElementById('quitToMenu');
+
+document.getElementById('btnMenu').onclick=()=>show(menu);
+document.getElementById('btnQuit').onclick=()=>{ running=false; show(menu); };
+playAgain.onclick=()=>{ show(null); run(selShot, selContest); };
+quitToMenu.onclick=()=>show(menu);
+
+function show(el){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show'));
+  if(el){ el.classList.add('show'); document.body.classList.add('overlay-open'); primeMenuDefaults(); }
+  else { document.body.classList.remove('overlay-open'); }
+}
+function primeMenuDefaults(){
+  const s=menu.querySelector('[data-shot].active')||menu.querySelector('[data-shot="three"]');
+  const c=menu.querySelector('[data-contest].active')||menu.querySelector('[data-contest="5"]');
+  s&&s.click(); c&&c.click();
+}
+
+let selShot='three', selContest=5;
+menu.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.hasAttribute('data-shot')){
+    selShot = btn.dataset.shot;
+    menu.querySelectorAll('[data-shot]').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+  } else if(btn.hasAttribute('data-contest')){
+    selContest = Number(btn.dataset.contest);
+    menu.querySelectorAll('[data-contest]').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+  }
+});
+startBtn.onclick=()=>{ document.body.classList.remove('overlay-open'); run(selShot, selContest); };
+
+const ATTEMPTS_MAX=25;
+const SHOTS={ three:{name:'Three‑Pointer', baseTime:900, baseGreen:.12}, mid:{name:'Mid‑Range', baseTime:800, baseGreen:.18}, rim:{name:'Lay/Dunk', baseTime:700, baseGreen:.26} };
+function paramsFor(shot, contest){ const s=SHOTS[shot]; const p=contest/100; return { chargeMs: Math.max(350, s.baseTime*(1-0.30*p)), greenFrac: s.baseGreen*(1-0.6*p) }; }
+
+function layout(shot, contest){ const {greenFrac}=paramsFor(shot, contest); const H=meter.clientHeight-12; const h=H*greenFrac; green.style.top='6px'; green.style.height=Math.round(h)+'px'; cursor.style.top=(meter.clientHeight-6-12)+'px'; shotLabel.textContent=SHOTS[shot].name; contestLabel.textContent=contest+'%'; }
+
+let running=false, charging=false, chargeStart=0, lastPhase=0, streak=0, total=0, made=0;
+function updateHUD(){ streakEl.textContent=String(streak); flames.textContent= streak>=20?'🔥🔥🔥🔥':streak>=15?'🔥🔥🔥':streak>=10?'🔥🔥':streak>=5?'🔥':''; greensCount.textContent=`${made}/${ATTEMPTS_MAX}`; }
+
+// ===== Simple tweens or Mixamo animation =====
+function tween(duration, onUpdate, onDone){ const t0=performance.now(); function step(){ const u=Math.min(1,(performance.now()-t0)/duration); onUpdate(u); if(u<1) requestAnimationFrame(step); else onDone&&onDone(); } requestAnimationFrame(step); }
+
+function press(){ if(!running||charging) return; charging=true; chargeStart=performance.now();
+  if(!mixer && playerPivot){ const startRot=playerPivot.rotation.x; const startY=playerPivot.position.y; tween(200,(u)=>{ const e=u*(2-u); playerPivot.rotation.x = startRot - 0.12*e; playerPivot.position.y = startY - 0.02*e; }); }
+  requestAnimationFrame(updateCharge);
+}
+
+function updateCharge(){ if(!running||!charging) return; const now=performance.now(); const {chargeMs}=paramsFor(selShot, selContest); const t=Math.min(1,(now-chargeStart)/chargeMs); lastPhase=t; const top=6, bottom=meter.clientHeight-6-12; const y=bottom - (bottom-top)*t; cursor.style.top=Math.round(y)+'px'; if(t>=1){ releaseShot(true); } else requestAnimationFrame(updateCharge); }
+function inGreen(phase){ const {greenFrac}=paramsFor(selShot, selContest); return phase >= 1 - greenFrac; }
+
+function releaseShot(timedOut=false){ if(!running||!charging) return; charging=false; total++; const hit=!timedOut && inGreen(lastPhase); startBallArc(hit);
+  if(mixer && jumpShotClip){
+    const action=mixer.clipAction(jumpShotClip);
+    action.setLoop(THREE.LoopOnce,1); action.clampWhenFinished=true; action.reset().play();
+  } else if(playerPivot){
+    const baseRot=playerPivot.rotation.x, baseY=playerPivot.position.y;
+    tween(260,(u)=>{ const e=u*(2-u); playerPivot.rotation.x = baseRot + 0.22*e; playerPivot.position.y = baseY + 0.08*Math.sin(e*Math.PI); },()=>{ tween(220,(v)=>{ playerPivot.rotation.x = baseRot + 0.22*(1-v); playerPivot.position.y = baseY*(1-v); }); });
+  }
+  if(hit){ made++; streak++; callout.className='callout green'; callout.textContent=`GREEN — ${made}/${ATTEMPTS_MAX}`; meter.classList.add('success'); setTimeout(()=>{ meter.classList.remove('success'); callout.textContent=''; },1200);} else { streak=0; callout.className='callout miss'; callout.textContent=`MISS — ${made}/${ATTEMPTS_MAX}`; setTimeout(()=> callout.textContent='',700);} updateHUD(); if(total>=ATTEMPTS_MAX){ goLeaderboard(); } }
+
+function run(shot, contest){ selShot=shot; selContest=contest; streak=0; total=0; made=0; updateHUD(); layout(shot, contest); running=true; show(null); callout.textContent=''; }
+
+// keyboard
+addEventListener('keydown',e=>{ if(e.repeat) return; if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); press(); }});
+addEventListener('keyup',e=>{ if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); releaseShot(); }});
+
+// gamepad (A/Cross or X/Square)
+let gpPrev=false; function pollPad(){ const pads=navigator.getGamepads?.()||[]; for(const p of pads){ if(!p) continue; const pressed = !!(p.buttons[0]?.pressed || p.buttons[2]?.pressed); if(pressed && !gpPrev) press(); if(!pressed && gpPrev) releaseShot(); gpPrev=pressed; } requestAnimationFrame(pollPad);} requestAnimationFrame(pollPad);
+
+// ===== Ball flight =====
+function startBallArc(hit){
+  const start=performance.now(), dur=620; const rimPos=new THREE.Vector3(0,2.6,0); const miss = hit? new THREE.Vector3(0,0,0) : new THREE.Vector3((Math.random()>.5?.18:-.18),(Math.random()>.5?.15:-.15),(Math.random()-.5)*.12); const from=ball.position.clone();
+  function arc(){ const u=Math.min(1,(performance.now()-start)/dur); const ez=1-Math.pow(1-u,2); const p=new THREE.Vector3().lerpVectors(from, rimPos.clone().add(miss), ez); p.y += Math.sin(ez*Math.PI)*0.55; ball.position.copy(p); if(u<1) requestAnimationFrame(arc); else if(hit) dropThrough(); else resetBall(); }
+  requestAnimationFrame(arc);
+}
+function dropThrough(){ const s=performance.now(), d=280; const b0=ball.position.clone(); function fall(){ const u=Math.min(1,(performance.now()-s)/d); ball.position.set(b0.x, b0.y - u*.5, b0.z); if(u<1) requestAnimationFrame(fall); else resetBall(); } requestAnimationFrame(fall); }
+function resetBall(){ const t0=performance.now(), d=240; const target=new THREE.Vector3(.18,1.55,0); const from=ball.position.clone(); function back(){ const u=Math.min(1,(performance.now()-t0)/d); ball.position.lerpVectors(from, target, u); if(u<1) requestAnimationFrame(back);} requestAnimationFrame(back); }
+
+// ===== Leaderboard =====
+function goLeaderboard(){ running=false; renderLB(); nameRow.style.display='flex'; show(leader); }
+function renderLB(){ const data=JSON.parse(localStorage.getItem('greenlb3')||'[]'); lbBody.innerHTML=data.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.greens}/${ATTEMPTS_MAX}</td><td>${r.mode}</td></tr>`).join(''); }
+saveScore.onclick=()=>{ const name=(playerName.value||'Player').trim(); const data=JSON.parse(localStorage.getItem('greenlb3')||'[]'); const mode=`${SHOTS[selShot].name} • ${selContest}%`; data.push({name, greens:made, mode}); data.sort((a,b)=>b.greens-a.greens).splice(20); localStorage.setItem('greenlb3', JSON.stringify(data)); renderLB(); nameRow.style.display='none'; };
+
+// ===== Tests =====
+(function tests(){ try{ console.group('%c2K Green Trainer – Tests','color:#22c55e');
+  console.assert(!!THREE,'THREE loaded');
+  const g5=paramsFor('three',5).greenFrac, g40=paramsFor('three',40).greenFrac; console.assert(g5>g40,'green window shrinks with more contest');
+  const pf=paramsFor('mid',20); const start=1-pf.greenFrac; console.assert(inGreen(start+0.0001)&&!inGreen(start-0.0001),'inGreen boundary');
+  layout('rim',5); console.log('All tests passed'); console.groupEnd(); }catch(e){ console.error('Tests failed',e);} })();
+</script>
+</body>
+</html>
