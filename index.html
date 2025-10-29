@@ -73,13 +73,15 @@
   }
 
   /* Move meter down and left a bit */
-  .meter{
-    right:auto;
-    left:calc(50% + 100px);
-    top:170px;
-    transform:scale(1.1);
+  #meter{                 /* use ID for higher specificity */
+    position:absolute;
+    right:auto !important;  /* cancel any right positioning */
+    left:calc(50% + 90px) !important; /* increase to push right; try 80–110px */
+    top:170px;              /* lower it a bit */
+    transform:scale(1.1);   /* keep your scale */
   }
-
+}
+  
   /* Optional: slightly shift callout down */
   .callout{
     top:380px;
